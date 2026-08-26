@@ -1,0 +1,360 @@
+---
+title: "Pertemuan 1"
+author: "Naa'ila Nur Musyaffa"
+date: "2026-08-25"
+output: 
+  rmdformats::readthedown
+---
+
+# INPUT DATA
+```{r}
+library(forecast)
+library(graphics)
+library(TTR)
+library(TSA)
+library(rio)
+
+data <- read.csv("C:\\Users\\Na'aila\\Documents\\Semester 5\\MPDW\\PRAK\\ispu_anggota_2.csv")
+
+data$periode <- 1:nrow(data)
+head(data)
+```
+# Eksplorasi Data 
+## Menampilkan data dalam bentuk tabel 
+```{r}
+View(data)
+```
+## Menampilkan Struktur data
+```{r}
+str(data)
+```
+## Menampilkan dimensi data
+```{r}
+dim(data)
+```
+## Mengubah data agar terbaca sebagai data deret waktu dengan fungsi ts()
+
+```{r}
+data.ts <- ts(data$pm10)
+data.ts
+```
+## Menampilkan ringkasan data
+```{r}
+summary(data.ts)
+```
+Berdasarkan hasil statistik deskriptif, nilai PM10 memiliki rata-rata sebesar 40,67 dengan median 38,50. Nilai PM10 berkisar antara 19,00 - 72,00 dengan 50% data berada pada rentang 30,00-51,00. Hal ini menunjukan bahwa konsentrasi PM10 pada periode pengamatan cenderung berada disekitar nilai 40,67. 
+## Membuat plot data deret waktu 
+```{r}
+ts.plot(data.ts, xlab = "Periode", ylab = "PM10 (ug/m3)", main = "Plot Deret Waktu PM10 - DKI1 (Bunderan HI)")
+points(data.ts)
+
+```
+Deret waktu PM10 di DKI1 (Bundaran HI) menunjukkan fluktuasi yang cukup tinggi selama periode pengamatan, dengan nilai berkisar sekitar 19–72 µg/m³. Pada awal periode, nilai PM10 cenderung berada pada tingkat yang lebih rendah, sedangkan pada periode akhir terlihat kecenderungan nilai yang lebih tinggi. Terdapat beberapa lonjakan dan penurunan yang cukup tajam, sementara pola musiman yang jelas belum terlihat secara visual. Oleh karena itu, diperlukan metode pemulusan seperti Single Moving Average untuk mengidentifikasi pola dan memperoleh hasil peramalan yang lebih baik.
+
+# Single Moving Average & Double MOving Average 
+## Pembagian data (80% data latih dan 20% data uji)
+```{r}
+n <- nrow(data)
+n_train <- floor(0.8*n)
+
+training <- data[1:n_train, ]
+testing <- data[(n_train + 1):n, ]
+
+train.ts <- ts(training$pm10)
+test.ts <- ts(testing$pm10)
+
+n_train
+```
+```{r}
+n_test <- nrow(testing)
+n_test
+```
+### Eksplorasi Data Latih  
+```{r}
+plot(train.ts, col = "lightgreen", main = "Plot Data Latih PM10"); points(train.ts)
+
+dev.copy(png, "plot_pm10_train.png"); dev.off()
+```
+Plot data latih menunjukkan nilai PM10 yang cukup naik turun selama 89 periode. Nilainya berada sekitar 19–72 µg/m³, dengan beberapa kenaikan yang cukup tinggi seperti pada periode 26 dan 35. Pada bagian akhir, nilai PM10 cenderung lebih tinggi dibandingkan beberapa periode sebelumnya, walaupun masih terdapat beberapa penurunan.
+
+### Eksplorasi Data Uji
+```{r}
+plot(test.ts, col = "green", main = "Plot Data Uji PM10"); points(test.ts)
+
+dev.copy(png, "plot_pm10_test.png"); dev.off()
+```
+Plot data uji menunjukkan nilai PM10 yang juga cukup berfluktuasi. Pada awal data, nilai PM10 berada sekitar 54–55 µg/m³ lalu sempat turun hingga sekitar 25 µg/m³ pada periode 7. Setelah itu, nilainya kembali meningkat dan pada beberapa periode terakhir cenderung berada di atas 50 µg/m³, bahkan mencapai sekitar 65 µg/m³.
+
+```{r}
+library(ggplot2)
+ggplot() +
+  geom_line(data = training, aes(x = periode, y = pm10, col = "Data Latih")) +
+  geom_line(data = testing,  aes(x = periode, y = pm10, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "PM10", color = "Legend") +
+  scale_colour_manual(name = "Keterangan:", breaks = c("Data Latih", "Data Uji"),
+                       values = c("blue", "red")) +
+  theme_bw() + theme(legend.position = "bottom")
+```
+Grafik menunjukkan bahwa data latih (biru) dan data uji (merah) sama-sama mengalami fluktuasi PM10 yang cukup tinggi. Data latih berada sekitar 20–72 µg/m³, sedangkan data uji berada sekitar 25–65 µg/m³. Pada data uji, terlihat bahwa nilai PM10 cenderung meningkat di bagian akhir periode, walaupun masih terdapat beberapa penurunan. Secara umum, pola data uji masih mengikuti kondisi data latih, sehingga data latih dapat digunakan sebagai dasar untuk melakukan peramalan pada data uji.
+
+# Single Moving Average (SMA)
+```{r}
+m <- 7
+data.sma <- SMA(train.ts,n = m)
+data.sma
+
+data.ramal <- c(NA, data.sma)
+data.ramal
+
+```
+```{r}
+data.ramal <- c(NA, data.sma)
+data.ramal
+```
+
+```{r}
+h_test <- n_test
+data.gab <- cbind(aktual=c(data.ts), 
+               pemulusan=c(data.sma,rep(NA, h_test)),
+               ramalan=c(data.ramal, rep(data.ramal[length(data.ramal)], h_test-1)))
+tail(data.gab, h_test +2)
+```
+Pemilihan orde SMA dilakukan dengan mencoba beberapa nilai m. Dari beberapa orde yang diuji, diperoleh bahwa SMA dengan m = 7 menghasilkan nilai MSE yang paling kecil. Oleh karena itu, m = 7 dipilih sebagai orde terbaik karena memberikan hasil pemulusan dan peramalan dengan tingkat kesalahan yang paling rendah dibandingkan orde lainnya. Dari hasil SMA dengan m = 7, nilai pemulusan baru mulai muncul pada periode ke-8 karena membutuhkan 7 data sebelumnya. Nilai pemulusan terlihat lebih stabil dibandingkan data aktual, sehingga fluktuasi PM10 yang cukup tajam menjadi lebih halus. Pada akhir data latih, nilai pemulusan berada sekitar 39–40, sedangkan hasil ramalan untuk data uji cenderung berada di sekitar 39,71–41,43. Ini menunjukkan bahwa dengan m = 7, SMA menghasilkan ramalan yang relatif stabil dan tidak terlalu mengikuti perubahan data aktual yang naik-turun secara tajam.
+
+
+```{r}
+ts.plot(data.ts, xlabt = "Periode", ylab = "PM10", main = paste("SMA m=", m))
+points(data.ts)
+lines(data.gab[,2], col = "lightgreen", lwd=2)
+lines(data.gab[,3], col = "pink", lwd =2 )
+legend("topleft", c("aktual", "pemulusan", "ramalam"), lty =1, col = c("black", "green", "red"), cex =0.7)
+
+dev.copy(png, "plot_sma.png"); dev.off()
+```
+Pada grafik terlihat bahwa garis pemulusan (hijau) mengikuti pola umum data aktual, tetapi tidak mampu mengikuti perubahan yang sangat tajam. Hal ini merupakan karakteristik SMA: karena menggunakan rata-rata 7 periode sebelumnya, perubahan ekstrem pada data aktual akan dihaluskan dan respons model menjadi lebih lambat. Garis ramalan (merah) kemudian berada relatif konstan di sekitar nilai 40 PM10 setelah periode tertentu. Ini menunjukkan bahwa ramalan SMA cenderung mengikuti nilai rata-rata beberapa pengamatan terakhir, sehingga kurang responsif terhadap fluktuasi mendadak.
+
+## Menghitung nilai keakuratan data latih 
+
+```{r}
+error_train.sma <- train.ts - data.ramal[1:length(train.ts)]
+SSE_train.sma  <- sum(error_train.sma[(m+1):length(train.ts)]^2)
+MSE_train.sma  <- mean(error_train.sma[(m+1):length(train.ts)]^2)
+RMSE_train.sma <- sqrt(MSE_train.sma)
+MAPE_train.sma <- mean(abs(error_train.sma[(m+1):length(train.ts)] /
+                             train.ts[(m+1):length(train.ts)]) * 100)
+ 
+akurasi_train.sma <- matrix(c(SSE_train.sma, MSE_train.sma, RMSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_train.sma) <- paste("SMA m =", m)
+akurasi_train.sma
+```
+Untuk akurasi data latih, metode SMA dengan periode 7 menghasilkan nilai SSE sebesar 10.652,73, MSE sebesar 129,91, RMSE sebesar 11,40, dan MAPE sebesar 25,32%. Nilai tersebut menunjukkan bahwa pada data latih, rata-rata kesalahan persentase peramalan adalah sebesar 25,32%, sedangkan penyimpangan hasil peramalan terhadap nilai aktual berdasarkan RMSE adalah sekitar 11,40 satuan PM10.
+
+
+## Menghitung nilai keakuratan data uji 
+```{r}
+idx_test <- (length(train.ts) + 1):n
+error_test.sma <- test.ts - data.gab[idx_test, 3]
+SSE_test.sma  <- sum(error_test.sma^2)
+MSE_test.sma  <- mean(error_test.sma^2)
+RMSE_test.sma <- sqrt(MSE_test.sma)
+MAPE_test.sma <- mean(abs(error_test.sma / test.ts) * 100)
+ 
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, RMSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.sma) <- paste("SMA m =", m)
+akurasi_test.sma
+```
+Untuk akurasi data uji, metode SMA dengan periode 7 menghasilkan nilai SSE sebesar 4.498,02, MSE sebesar 195,57, RMSE sebesar 13,98, dan MAPE sebesar 26,48%. Nilai MAPE sebesar 26,48% menunjukkan bahwa rata-rata kesalahan peramalan pada data uji sekitar 26,48%. Dibandingkan dengan data latih, nilai MAPE dan RMSE pada data uji lebih tinggi, sehingga dapat dikatakan bahwa kemampuan model dalam melakukan peramalan pada data baru sedikit menurun.
+
+# Double Moving Average (DMA)
+```{r}
+dma <- SMA(data.sma, n = m)
+at <- 2*data.sma -dma 
+bt <- 2/(m-1) *(data.sma - dma)
+data.dma <- at + bt 
+data.ramald <- c(NA, data.dma)
+
+t <- 1:h_test
+f <- c()
+for (i in t) {
+  f[i] <- at[length(at)] + bt[length(bt)] * i
+}
+ 
+data.gab2 <- cbind(
+  aktual     = c(data.ts),
+  pemulusan1 = c(data.sma, rep(NA, h_test)),
+  pemulusan2 = c(dma, rep(NA, h_test)),
+  at         = c(at, rep(NA, h_test)),
+  bt         = c(bt, rep(NA, h_test)),
+  ramalan    = c(data.ramald, f[-1])
+)
+tail(data.gab2, h_test + 2)
+```
+```{r}
+ts.plot(data.ts, xlab = "Periode", ylab = "PM10", main = paste("DMA m =", m))
+points(data.ts)
+lines(data.gab2[, 3], col = "lightgreen", lwd = 2)
+lines(data.gab2[, 6], col = "pink", lwd = 2)
+legend("topleft", c("aktual", "pemulusan", "ramalan"), lty = 1,
+       col = c("black", "green", "red"), cex = 0.7)
+dev.copy(png, "plot_dma.png"); dev.off()
+```
+Pada grafik DMA m = 7, garis pemulusan mampu mengikuti tren umum data PM10, tetapi kurang responsif terhadap perubahan yang tiba-tiba. Garis ramalan juga terlihat cukup jauh dari data aktual pada beberapa periode, terutama di bagian akhir. Hal ini menunjukkan bahwa DMA m = 7 masih kurang mampu menangkap fluktuasi tajam pada data PM10.
+
+
+## Menghitung keakuraratan data latih 
+```{r}
+start_dma <- 2 * m
+error_train.dma <- train.ts - data.ramald[1:length(train.ts)]
+SSE_train.dma  <- sum(error_train.dma[start_dma:length(train.ts)]^2)
+MSE_train.dma  <- mean(error_train.dma[start_dma:length(train.ts)]^2)
+RMSE_train.dma <- sqrt(MSE_train.dma)
+MAPE_train.dma <- mean(abs(error_train.dma[start_dma:length(train.ts)] /
+                             train.ts[start_dma:length(train.ts)]) * 100)
+ 
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, RMSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_train.dma) <- paste("DMA m =", m)
+akurasi_train.dma
+```
+Berdasarkan hasil perhitungan, metode Double Moving Average (DMA) dengan periode 7 pada data latih menghasilkan nilai SSE sebesar 13.607,76, MSE sebesar 179,04, RMSE sebesar 13,38, dan MAPE sebesar 28,95%. Nilai MAPE sebesar 28,95% menunjukkan bahwa rata-rata kesalahan peramalan terhadap data aktual berada di sekitar 28,95%. Dengan demikian, tingkat akurasi model pada data latih dapat dikategorikan cukup baik, karena nilai kesalahan peramalan masih relatif rendah dibandingkan dengan data uji.
+
+## Menghitung keakuratan data uji 
+```{r}
+error_test.dma <- test.ts - data.gab2[idx_test, 6]
+SSE_test.dma  <- sum(error_test.dma^2)
+MSE_test.dma  <- mean(error_test.dma^2)
+RMSE_test.dma <- sqrt(MSE_test.dma)
+MAPE_test.dma <- mean(abs(error_test.dma / test.ts) * 100)
+ 
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, RMSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.dma) <- paste("DMA m =", m)
+akurasi_test.dma
+```
+Pada data uji, metode Double Moving Average (DMA) dengan periode 7 menghasilkan nilai SSE sebesar 55.349,90, MSE sebesar 2.406,52, RMSE sebesar 49,06, dan MAPE sebesar 85,14%. Nilai MAPE sebesar 85,14% menunjukkan bahwa rata-rata kesalahan peramalan mencapai sekitar 85,14%. Hal ini menunjukkan bahwa tingkat akurasi model pada data uji tergolong rendah, karena nilai kesalahan peramalan cukup besar. Peningkatan nilai RMSE dan MAPE dibandingkan data latih juga menunjukkan bahwa model DMA periode 7 kurang mampu melakukan peramalan dengan baik pada data yang belum pernah digunakan dalam proses pembentukan model.
+
+# Single Exponential Smoothing (SES)
+```{r}
+ses.opt <- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = NULL )
+ses.opt
+```
+```{r}
+plot(ses.opt); dev.copy(png, "plot_ses.png"); dev.off()
+
+```
+Berdasarkan grafik Holt-Winters filtering, garis hitam menunjukkan data aktual, sedangkan garis merah menunjukkan hasil pemulusan (fitted value). Terlihat bahwa garis merah mengikuti pola umum data aktual, terutama dalam menangkap tren kenaikan dan penurunan data, tetapi tidak sepenuhnya mengikuti perubahan yang terjadi secara cepat. Pada beberapa periode dengan perubahan yang cukup tajam, seperti lonjakan atau penurunan nilai aktual, garis hasil pemulusan terlihat lebih halus dan cenderung terlambat mengikuti perubahan tersebut. Hal ini menunjukkan bahwa metode Holt-Winters mampu menangkap pola umum dan kecenderungan data, tetapi kurang responsif terhadap fluktuasi yang terjadi secara tiba-tiba. Secara keseluruhan, hasil filtering menunjukkan bahwa model dapat memberikan gambaran tren data dengan lebih stabil dibandingkan data aktual yang memiliki fluktuasi cukup tinggi.
+
+```{r}
+ramalan.ses <- forecast(ses.opt, h = n_test)
+ramalan.ses
+```
+Hasil peramalan SES dengan alpha 0,332 menunjukkan nilai ramalan konstan sebesar 44,27 untuk periode mendatang. Interval prediksi semakin lebar pada periode yang lebih jauh, sehingga menunjukkan bahwa ketidakpastian ramalan meningkat seiring bertambahnya periode peramalan.
+
+## Menghitung keakuratan data latih 
+```{r}
+SSE.ses <- ses.opt$SSE
+MSE.ses <- SSE.ses / length(train.ts)
+RMSE.ses <- sqrt(MSE.ses)
+sisaan.ses <- ramalan.ses$residuals
+MAPE.ses <- mean(abs(sisaan.ses[2:length(train.ts)]/train.ts[2:length(train.ts)])*100)
+
+akurasi_train.ses <- matrix(c(SSE.ses, MSE.ses, MAPE.ses))
+row.names(akurasi_train.ses) <- c("SES", "MSE", "MAPE")
+colnames(akurasi_train.ses) <- paste("SES alpha=", round(ses.opt$alpha, 3))
+akurasi_train.ses
+```
+Berdasarkan hasil perhitungan, metode Single Exponential Smoothing (SES) dengan nilai alpha 0,332 pada data latih menghasilkan nilai SSE sebesar 9.817,34, MSE sebesar 1.103,71, dan MAPE sebesar 23,42%. Nilai MAPE sebesar 23,42% menunjukkan bahwa rata-rata kesalahan peramalan terhadap data aktual adalah sekitar 23,42%. Dengan demikian, tingkat akurasi metode SES pada data latih dapat dikategorikan cukup baik, karena nilai kesalahan peramalannya relatif rendah.
+
+## Menghitung keakuratan data uji 
+```{r}
+e.ses <- as.numeric(ramalan.ses$mean) - as.numeric(testing$pm10)
+SSE_test.ses <- sum(e.ses^2)
+MSE_test.ses <- mean(e.ses^2)
+RMSE_test.ses <- sqrt(MSE_test.ses)
+MAPE_test.ses <- mean(abs(e.ses / testing$pm10) * 100)
+
+akurasi_test.ses <- matrix(c(SSE_test.ses, MSE_test.ses, RMSE_test.ses, MAPE_test.ses))
+row.names(akurasi_test.ses) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.ses) <- paste("SES alpha =", round (ses.opt$alpha, 3))
+akurasi_test.ses
+
+```
+Pada data uji, metode Single Exponential Smoothing (SES) dengan alpha 0,332 menghasilkan nilai SSE sebesar 3.174,45, MSE sebesar 138,02, RMSE sebesar 11,75, dan MAPE sebesar 23,99%. Nilai MAPE sebesar 23,99% menunjukkan bahwa rata-rata kesalahan peramalan pada data uji sekitar 23,99%. Nilai tersebut hanya sedikit lebih tinggi dibandingkan MAPE data latih sebesar 23,42%, sehingga dapat dikatakan bahwa kemampuan model dalam melakukan peramalan pada data baru masih cukup baik dan relatif stabil.
+
+# Double Exponential Smoothing (DES)
+
+```{r}
+des.opt <- HoltWinters(train.ts, gamma = FALSE )
+des.opt 
+```
+```{r}
+plot(des.opt); dev.copy(png, "plot_des.png"); dev.off()
+```
+Berdasarkan grafik Double Exponential Smoothing (DES), garis hasil pemulusan mengikuti pola umum data aktual, terutama dalam menangkap tren kenaikan dan penurunan data. Namun, pada beberapa periode dengan perubahan yang tajam, hasil pemulusan masih terlihat lebih halus dibandingkan data aktual. Hal ini menunjukkan bahwa metode DES mampu menangkap tren data dengan cukup baik, tetapi kurang responsif terhadap fluktuasi yang terjadi secara tiba-tiba.
+
+```{r}
+ramalan.des <- forecast(des.opt, h = n_test)
+ramalan.des
+```
+Berdasarkan hasil peramalan menggunakan metode Double Exponential Smoothing, diperoleh nilai point forecast untuk 23 periode data uji. Hasil peramalan menunjukkan adanya kecenderungan peningkatan nilai, yang terlihat dari nilai ramalan sebesar 46,15621 pada periode ke-90 dan meningkat secara bertahap pada periode-periode berikutnya. Selain itu, hasil peramalan dilengkapi dengan interval prediksi 80% dan 95%. Rentang interval prediksi semakin melebar pada periode yang lebih jauh, yang menunjukkan bahwa tingkat ketidakpastian hasil peramalan meningkat seiring bertambahnya periode yang diramalkan.
+
+## Menghitung keakuratan data latih 
+```{r}
+SSE.des <- des.opt$SSE
+MSE.des <- SSE.des / length(train.ts)
+RMSE.des <- sqrt(MSE.des)
+sisaan.des <- ramalan.des$residuals
+MAPE.des <- mean(abs(sisaan.des[3:length(train.ts)]/
+                       train.ts[3:length(train.ts)]) * 100)
+
+akurasi_train.des <- matrix(c(SSE.des, MSE.des, RMSE.des, MAPE.des))
+row.names(akurasi_train.des) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_train.des) <- paste0("DES alpha=", round(des.opt$alpha,3),
+                                       " beta=", round(des.opt$beta,3))
+akurasi_train.des
+```
+Berdasarkan hasil perhitungan pada data latih, metode Double Exponential Smoothing (DES) dengan nilai alpha (α) sebesar 0,477 dan beta (β) sebesar 0,034 menghasilkan nilai SSE sebesar 10.590,99786, MSE sebesar 118,99998, RMSE sebesar 10,90871, dan MAPE sebesar 23,84843%. Nilai MAPE tersebut menunjukkan bahwa rata-rata persentase kesalahan hasil peramalan terhadap data aktual pada data latih adalah sebesar 23,85%. Dengan demikian, model DES mampu memberikan hasil peramalan dengan tingkat kesalahan yang masih tergolong cukup baik untuk digunakan dalam proses peramalan.
+
+## Menghitung keakuratan data uji
+```{r}
+e.des <- as.numeric(ramalan.des$mean) - as.numeric(testing$pm10)
+SSE_test.des  <- sum(e.des^2)
+MSE_test.des  <- mean(e.des^2)
+RMSE_test.des <- sqrt(MSE_test.des)
+MAPE_test.des <- mean(abs(e.des / testing$pm10) * 100)
+ 
+akurasi_test.des <- matrix(c(SSE_test.des, MSE_test.des, RMSE_test.des, MAPE_test.des))
+row.names(akurasi_test.des) <- c("SSE", "MSE", "RMSE", "MAPE")
+colnames(akurasi_test.des) <- paste0("DES alpha=", round(des.opt$alpha,3),
+                                      " beta=", round(des.opt$beta,3))
+akurasi_test.des
+```
+Berdasarkan hasil pengujian menggunakan data uji, metode Double Exponential Smoothing (DES) dengan nilai alpha (α) sebesar 0,477 dan beta (β) sebesar 0,034 menghasilkan nilai SSE sebesar 2.688,87821, MSE sebesar 116,90775, RMSE sebesar 10,81239, dan MAPE sebesar 22,88451%. Nilai MAPE menunjukkan bahwa rata-rata persentase kesalahan peramalan terhadap data aktual pada data uji adalah sebesar 22,88%. Hasil tersebut menunjukkan bahwa model DES mampu memberikan hasil peramalan yang cukup baik pada data yang belum digunakan dalam proses pembentukan model.
+
+# Kesimpulan 
+```{r}
+tabel_akurasi <- data.frame(
+  Metode = c("SMA", "DMA", "SES", "DES"),
+  SSE_Latih  = c(SSE_train.sma, SSE_train.dma, SSE.ses, SSE.des),
+  MSE_Latih  = c(MSE_train.sma, MSE_train.dma, MSE.ses, MSE.des),
+  RMSE_Latih = c(RMSE_train.sma, RMSE_train.dma, RMSE.ses, RMSE.des),
+  MAPE_Latih = c(MAPE_train.sma, MAPE_train.dma, MAPE.ses, MAPE.des),
+  SSE_Uji  = c(SSE_test.sma, SSE_test.dma, SSE_test.ses, SSE_test.des),
+  MSE_Uji  = c(MSE_test.sma, MSE_test.dma, MSE_test.ses, MSE_test.des),
+  RMSE_Uji = c(RMSE_test.sma, RMSE_test.dma, RMSE_test.ses, RMSE_test.des),
+  MAPE_Uji = c(MAPE_test.sma, MAPE_test.dma, MAPE_test.ses, MAPE_test.des)
+)
+print(tabel_akurasi, digits = 4)
+
+```
+Berdasarkan tabel perbandingan hasil pemulusan menggunakan metode SMA, DMA, SES, dan DES, dapat ditarik kesimpulan bahwa metode DES (Double Exponential Smoothing) merupakan metode terbaik untuk data uji, karena menghasilkan nilai kesalahan yang paling rendah dibandingkan metode lainnya.
+
+Pada data latih, metode SES memiliki performa terbaik dengan nilai MSE sebesar 110,3 dan RMSE sebesar 10,50, sedangkan DES menghasilkan MSE sebesar 119,0 dan RMSE sebesar 10,91. Namun, pada data uji, metode DES memberikan hasil terbaik dengan SSE sebesar 2.689, MSE sebesar 116,9, RMSE sebesar 10,81, dan MAPE sebesar 22,88%. Nilai tersebut merupakan yang paling rendah dibandingkan SMA, DMA, dan SES. Sebagai perbandingan, SES menghasilkan MAPE 23,99%, SMA 26,48%, dan DMA 85,14%.
+
+Dengan demikian, DES dipilih sebagai metode pemulusan terbaik karena memiliki tingkat kesalahan paling kecil pada data uji. Hal ini menunjukkan bahwa DES mampu memberikan hasil peramalan yang lebih akurat dan lebih baik dalam memprediksi data yang belum digunakan dalam proses pembentukan model. Selain itu, penggunaan DES sesuai untuk data yang memiliki kecenderungan atau tren, karena metode ini mempertimbangkan komponen level dan tren dalam melakukan peramalan.
+
+
+
+  
