@@ -1,0 +1,442 @@
+---
+title: "Pertemuan 3 - Regresi dengan Peubah Lag"
+author: Naa'ila Nur Musyaffa
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
+
+## Packages
+
+```{r, echo=FALSE}
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+```
+
+# Latihan 1 
+## Data
+```{r}
+data <- data.frame(
+  Periode = 1:20,
+  Y = c(3.63, 4.20, 3.33, 4.54, 2.89,
+        4.87, 4.90, 5.29, 6.18, 7.20,
+        7.25, 6.09, 6.80, 8.65, 8.43,
+        8.29, 7.18, 7.90, 8.45, 8.23),
+  X = c(0.97, 0.95, 0.99, 0.91, 0.98,
+        0.90, 0.89, 0.86, 0.85, 0.82,
+        0.79, 0.83, 0.81, 0.77, 0.76,
+        0.80, 0.83, 0.79, 0.76, 0.78)
+)
+
+data
+
+```
+
+# Membuat Variabel Lag 
+```{r}
+data$X1 <- c(NA, data$X[1:19])
+data$X2 <- c(NA, NA, data$X[1:18])
+data$X3 <- c(NA, NA, NA, data$X[1:17])
+data$X4 <- c(NA, NA, NA, NA, data$X[1:16])
+```
+
+# Model distributed lag 
+```{r}
+# Lag 0
+model0 <- lm(Y ~ X, data = data)
+
+# Lag 1
+model1 <- lm(Y ~ X + X1, data = data)
+
+# Lag 2
+model2 <- lm(Y ~ X + X1 + X2, data = data)
+
+# Lag 3
+model3 <- lm(Y ~ X + X1 + X2 + X3, data = data)
+
+# Lag 4
+model4 <- lm(Y ~ X + X1 + X2 + X3 + X4, data = data)
+```
+
+# Membandingkan Model Terbaik
+```{r}
+hasil <- data.frame(
+  Model = c("Lag 0", "Lag 1", "Lag 2", "Lag 3", "Lag 4"),
+  AIC = c(AIC(model0), AIC(model1), AIC(model2),
+          AIC(model3), AIC(model4)),
+  BIC = c(BIC(model0), BIC(model1), BIC(model2),
+          BIC(model3), BIC(model4))
+)
+
+hasil
+
+```
+# Model dengan AIC dan BIC terkecil 
+```{r}
+hasil[which.min(hasil$BIC), ]
+
+```
+Berdasarkan perbandingan nilai AIC dan BIC dari beberapa model Distributed Lag, diperoleh bahwa model dengan lag 3 memiliki nilai AIC dan BIC paling kecil. Oleh karena itu, model Distributed Lag dengan lag 3 dipilih sebagai model terbaik, karena memberikan keseimbangan yang paling baik antara kesesuaian model dan kompleksitas model.
+
+# Model terbaik 
+```{r}
+model_terbaik <- list(
+  model0, model1, model2, model3, model4
+)[[which.min(hasil$BIC)]]
+
+summary(model_terbaik)
+
+```
+Berdasarkan hasil model Distributed Lag, harga pada periode sekarang berpengaruh negatif dan signifikan terhadap pangsa pasar, sedangkan harga pada lag 1, lag 2, dan lag 3 tidak signifikan secara parsial. Model memiliki R-squared sebesar 95,96%, sehingga sebagian besar variasi pangsa pasar dapat dijelaskan oleh harga sekarang dan harga pada periode sebelumnya. Secara simultan, model signifikan dengan p-value sebesar 2,917 × 10⁻⁸ < 0,
+
+# Koefisien model 
+```{r}
+coef(model_terbaik)
+```
+Berdasarkan hasil estimasi, diperoleh koefisien intercept sebesar 29,3254, X sebesar -22,6847, X1 sebesar 0,6568, X2 sebesar -1,6947, dan X3 sebesar -3,3754. Koefisien X, X2, dan X3 bernilai negatif yang menunjukkan bahwa kenaikan harga pada periode tersebut cenderung menurunkan pangsa pasar, sedangkan X1 bernilai positif yang menunjukkan hubungan searah dengan pangsa pasar. Koefisien terbesar secara absolut terdapat pada X, sehingga harga pada periode sekarang memiliki pengaruh paling besar terhadap pangsa pasar dalam model.
+
+# R-squared dan MSE
+```{r}
+summary(model_terbaik)$r.squared
+
+summary(model_terbaik)$adj.r.squared
+
+mean(residuals(model_terbaik)^2)
+
+
+```
+Nilai R-squared sebesar 0,9596 atau 95,96%, artinya sebesar 95,96% variasi pangsa pasar dapat dijelaskan oleh harga pada periode sekarang hingga tiga periode sebelumnya. Sementara itu, sebesar 4,04% variasi pangsa pasar dijelaskan oleh faktor lain yang tidak terdapat dalam model. Nilai Adjusted R-squared sebesar 0,9462 atau 94,62% menunjukkan bahwa setelah memperhitungkan jumlah variabel dalam model, kemampuan model dalam menjelaskan variasi pangsa pasar masih tergolong tinggi.
+
+# Nilai prediksi dan residual 
+```{r}
+fitted(model_terbaik)
+
+residuals(model_terbaik)
+
+```
+Nilai prediksi menunjukkan market share hasil estimasi model pada setiap periode, sedangkan residual menunjukkan selisih antara market share aktual dan nilai prediksinya. Nilai residual yang diperoleh berkisar dari -0,67 hingga 0,65, yang menunjukkan besarnya kesalahan prediksi pada masing-masing periode.
+# Diagnostik Model 
+```{r}
+par(mfrow = c(2, 2))
+plot(model_terbaik)
+par(mfrow = c(1, 1))
+```
+# Uji normalitas residual 
+```{r}
+shapiro.test(residuals(model_terbaik))
+```
+
+# Model Terbaik 
+```{r}
+formula(model_terbaik)
+```
+Berdasarkan uji Shapiro-Wilk, diperoleh nilai W = 0,97461 dengan p-value = 0,8929. Karena p-value > 0,05, maka H₀ tidak ditolak, sehingga dapat disimpulkan bahwa residual model berdistribusi normal. Jadi, asumsi normalitas residual pada model terbaik terpenuhi.
+
+# Latihan 2 
+
+## DATA 
+```{r}
+data2 <- data.frame(
+  Year = 1975:2014,
+  Sales = c(
+    11.7, 12.0, 12.3, 12.8, 13.1, 13.6, 13.9, 14.4, 14.7, 15.3,
+    15.5, 15.8, 16.1, 16.6, 16.9, 16.7, 16.9, 17.4, 17.6, 17.9,
+    18.0, 17.9, 18.0, 18.2, 18.2, 18.3, 18.6, 19.2, 19.3, 19.5,
+    19.2, 19.3, 19.5, 20.0, 20.0, 19.9, 19.8, 19.9, 20.2, 21.0
+  ),
+  Advertising = c(
+    9.4, 9.6, 10.0, 10.4, 10.8, 10.9, 11.7, 12.2, 12.5, 12.9,
+    13.0, 13.2, 13.8, 14.2, 14.6, 14.4, 15.0, 15.4, 15.7, 15.9,
+    15.9, 16.0, 16.3, 16.2, 16.8, 17.3, 17.6, 18.1, 18.3, 18.5,
+    18.7, 18.9, 19.2, 20.0, 20.0, 20.3, 20.4, 21.0, 21.5, 22.1
+  )
+)
+
+data2
+```
+
+## Membuat Variabel Lag
+```{r}
+data2$Y1 <- c(NA, head(data2$Sales, -1))
+data2$Y2 <- c(NA, NA, head(data2$Sales, -2))
+data2$Y3 <- c(NA, NA, NA, head(data2$Sales, -3))
+data2$Y4 <- c(NA, NA, NA, NA, head(data2$Sales, -4))
+
+data2$X1 <- c(NA, head(data2$Advertising, -1))
+data2$X2 <- c(NA, NA, head(data2$Advertising, -2))
+data2$X3 <- c(NA, NA, NA, head(data2$Advertising, -3))
+data2$X4 <- c(NA, NA, NA, NA, head(data2$Advertising, -4))
+
+```
+
+
+## Model ARDL
+```{r}
+# ARDL (0,0)
+model00 <- lm(Sales ~ Advertising, data = data2)
+
+# ARDL (1,0)
+model10 <- lm(Sales ~ Y1 + Advertising, data = data2)
+
+# ARDL (2,0)
+model20 <- lm(Sales ~ Y1 + Y2 + Advertising, data = data2)
+
+# ARDL (3,0)
+model30 <- lm(Sales ~ Y1 + Y2 + Y3 + Advertising, data = data2)
+
+# ARDL (4,0)
+model40 <- lm(Sales ~ Y1 + Y2 + Y3 + Y4 + Advertising, data = data2)
+
+
+# ARDL (0,1)
+model01 <- lm(Sales ~ Advertising + X1, data = data2)
+
+# ARDL (1,1)
+model11 <- lm(Sales ~ Y1 + Advertising + X1, data = data2)
+
+# ARDL (2,1)
+model21 <- lm(Sales ~ Y1 + Y2 + Advertising + X1, data = data2)
+
+# ARDL (3,1)
+model31 <- lm(Sales ~ Y1 + Y2 + Y3 + Advertising + X1,
+              data = data2)
+
+# ARDL (4,1)
+model41 <- lm(Sales ~ Y1 + Y2 + Y3 + Y4 +
+                Advertising + X1,
+              data = data2)
+
+
+# ARDL (0,2)
+model02 <- lm(Sales ~ Advertising + X1 + X2,
+              data = data2)
+
+# ARDL (1,2)
+model12 <- lm(Sales ~ Y1 + Advertising + X1 + X2,
+              data = data2)
+
+# ARDL (2,2)
+model22 <- lm(Sales ~ Y1 + Y2 + Advertising + X1 + X2,
+              data = data2)
+
+# ARDL (3,2)
+model32 <- lm(Sales ~ Y1 + Y2 + Y3 +
+                Advertising + X1 + X2,
+              data = data2)
+
+# ARDL (4,2)
+model42 <- lm(Sales ~ Y1 + Y2 + Y3 + Y4 +
+                Advertising + X1 + X2,
+              data = data2)
+
+
+# ARDL (0,3)
+model03 <- lm(Sales ~ Advertising + X1 + X2 + X3,
+              data = data2)
+
+# ARDL (1,3)
+model13 <- lm(Sales ~ Y1 + Advertising +
+                X1 + X2 + X3,
+              data = data2)
+
+# ARDL (2,3)
+model23 <- lm(Sales ~ Y1 + Y2 + Advertising +
+                X1 + X2 + X3,
+              data = data2)
+
+# ARDL (3,3)
+model33 <- lm(Sales ~ Y1 + Y2 + Y3 +
+                Advertising + X1 + X2 + X3,
+              data = data2)
+
+# ARDL (4,3)
+model43 <- lm(Sales ~ Y1 + Y2 + Y3 + Y4 +
+                Advertising + X1 + X2 + X3,
+              data = data2)
+
+
+# ARDL (0,4)
+model04 <- lm(Sales ~ Advertising + X1 + X2 + X3 + X4,
+              data = data2)
+
+# ARDL (1,4)
+model14 <- lm(Sales ~ Y1 + Advertising +
+                X1 + X2 + X3 + X4,
+              data = data2)
+
+# ARDL (2,4)
+model24 <- lm(Sales ~ Y1 + Y2 + Advertising +
+                X1 + X2 + X3 + X4,
+              data = data2)
+
+# ARDL (3,4)
+model34 <- lm(Sales ~ Y1 + Y2 + Y3 +
+                Advertising + X1 + X2 + X3 + X4,
+              data = data2)
+
+# ARDL (4,4)
+model44 <- lm(Sales ~ Y1 + Y2 + Y3 + Y4 +
+                Advertising + X1 + X2 + X3 + X4,
+              data = data2)
+```
+
+
+## Membandingkan Model 
+
+```{r}
+hasil2 <- data.frame(
+  Model = c(
+    "ARDL(0,0)", "ARDL(1,0)", "ARDL(2,0)", "ARDL(3,0)", "ARDL(4,0)",
+    "ARDL(0,1)", "ARDL(1,1)", "ARDL(2,1)", "ARDL(3,1)", "ARDL(4,1)",
+    "ARDL(0,2)", "ARDL(1,2)", "ARDL(2,2)", "ARDL(3,2)", "ARDL(4,2)",
+    "ARDL(0,3)", "ARDL(1,3)", "ARDL(2,3)", "ARDL(3,3)", "ARDL(4,3)",
+    "ARDL(0,4)", "ARDL(1,4)", "ARDL(2,4)", "ARDL(3,4)", "ARDL(4,4)"
+  ),
+  
+  AIC = c(
+    AIC(model00), AIC(model10), AIC(model20), AIC(model30), AIC(model40),
+    AIC(model01), AIC(model11), AIC(model21), AIC(model31), AIC(model41),
+    AIC(model02), AIC(model12), AIC(model22), AIC(model32), AIC(model42),
+    AIC(model03), AIC(model13), AIC(model23), AIC(model33), AIC(model43),
+    AIC(model04), AIC(model14), AIC(model24), AIC(model34), AIC(model44)
+  ),
+  
+  BIC = c(
+    BIC(model00), BIC(model10), BIC(model20), BIC(model30), BIC(model40),
+    BIC(model01), BIC(model11), BIC(model21), BIC(model31), BIC(model41),
+    BIC(model02), BIC(model12), BIC(model22), BIC(model32), BIC(model42),
+    BIC(model03), BIC(model13), BIC(model23), BIC(model33), BIC(model43),
+    BIC(model04), BIC(model14), BIC(model24), BIC(model34), BIC(model44)
+  )
+)
+
+hasil2
+```
+
+## Menentukan Model Terbaik
+
+```{r}
+# Model dengan AIC terkecil
+hasil2[which.min(hasil$AIC), ]
+
+
+# Model dengan BIC terkecil
+hasil2[which.min(hasil$BIC), ]
+
+
+# Model terbaik berdasarkan BIC
+model_list <- list(
+  model00, model10, model20, model30, model40,
+  model01, model11, model21, model31, model41,
+  model02, model12, model22, model32, model42,
+  model03, model13, model23, model33, model43,
+  model04, model14, model24, model34, model44
+)
+
+model_terbaik2 <- model_list[[which.min(hasil$BIC)]]
+
+summary(model_terbaik2)
+```
+
+Berdasarkan hasil tersebut, model terbaik yang diperoleh adalah ARDL(3,0) dengan nilai AIC sebesar -7,933247 dan BIC sebesar 1,73226. Model ini dipilih karena memiliki nilai BIC paling kecil dibandingkan model ARDL lainnya yang diuji, sehingga dianggap paling sesuai untuk digunakan dalam pemodelan hubungan antara Sales dan Advertising.
+
+## Model Terbaik 
+
+```{r}
+formula(model_terbaik2)
+```
+Model ARDL(3,0) yang diperoleh adalah Sales ~ Y1 + Y2 + Y3 + Advertising. Artinya, nilai Sales saat ini dipengaruhi oleh Sales pada 1, 2, dan 3 periode sebelumnya, serta nilai Advertising pada periode yang sama. Dengan demikian, model mempertimbangkan pengaruh Sales masa lalu dan Advertising dalam menjelaskan perubahan Sales.
+
+## Koefisien Model 
+
+```{r}
+coef(model_terbaik2)
+```
+Model ARDL(3,0) memiliki koefisien Sales periode sebelumnya yaitu Y1 = 0,9271, Y2 = -0,2297, dan Y3 = 0,0686, sedangkan koefisien Advertising sebesar 0,1434. Artinya, Sales pada periode sebelumnya berpengaruh terhadap Sales saat ini, sementara Advertising memiliki hubungan positif dengan Sales. Koefisien Advertising sebesar 0,1434 menunjukkan bahwa setiap kenaikan 1 satuan Advertising diperkirakan meningkatkan Sales sebesar 0,1434 satuan, dengan variabel lainnya tetap
+
+## R-Squared & Adjusted R-Squared
+```{r}
+summary(model_terbaik2)$r.squared
+
+summary(model_terbaik2)$adj.r.squared
+```
+Nilai R-squared sebesar 0,9928 menunjukkan bahwa sekitar 99,28% variasi Sales dapat dijelaskan oleh variabel dalam model, yaitu Sales pada tiga periode sebelumnya dan Advertising. Sementara itu, Adjusted R-squared sebesar 0,9919 menunjukkan bahwa setelah memperhitungkan jumlah variabel dalam model, sekitar 99,19% variasi Sales masih dapat dijelaskan oleh model. Jadi, model ARDL(3,0) memiliki kemampuan penjelasan yang sangat tinggi.
+
+## MSE
+```{r}
+mean(residuals(model_terbaik2)^2)
+```
+Nilai MSE sebesar 0,0342 menunjukkan bahwa rata-rata kuadrat kesalahan prediksi model relatif kecil. Semakin kecil nilai MSE, semakin kecil kesalahan antara nilai Sales aktual dan nilai Sales hasil prediksi. Jadi, model ARDL(3,0) memiliki kesalahan prediksi yang cukup kecil.
+
+## Nilai Prediksi 
+```{r}
+fitted(model_terbaik2)
+```
+Nilai prediksi Sales dari model ARDL(3,0) berada pada kisaran 12,88 hingga 20,62. Nilai ini merupakan hasil estimasi Sales berdasarkan nilai Sales pada periode sebelumnya dan Advertising yang digunakan dalam model.
+
+## Redisual 
+```{r}
+residuals(model_terbaik2)
+```
+Residual menunjukkan selisih antara Sales aktual dengan Sales hasil prediksi. Dari hasil tersebut, residual berada pada kisaran sekitar -0,38 hingga 0,37. Nilai residual yang relatif kecil menunjukkan bahwa nilai prediksi model cukup dekat dengan nilai Sales aktual.
+
+## Plot Diagnostik 
+```{r}
+par(mfrow = c(2,2))
+
+plot(model_terbaik2)
+
+par(mfrow = c(1,1))
+```
+
+
+## Uji normaliras residual
+```{r}
+shapiro.test(residuals(model_terbaik2))
+```
+Berdasarkan uji Shapiro-Wilk diperoleh nilai W = 0,98468 dengan p-value = 0,8801. Karena p-value > 0,05, maka H₀ tidak ditolak, sehingga dapat disimpulkan bahwa residual model ARDL(3,0) berdistribusi normal. Jadi, asumsi normalitas residual pada model sudah terpenuhi.
+
+## data aktual dan prediksi
+```{r}
+data_prediksi <- data.frame(
+  Year = tail(data2$Year, length(fitted(model_terbaik2))),
+  Aktual = tail(data2$Sales, length(fitted(model_terbaik2))),
+  Prediksi = fitted(model_terbaik2)
+)
+
+data_prediksi
+```
+
+
+## Plot Aktual VS Prediksi
+```{r}
+plot(
+  data_prediksi$Year,
+  data_prediksi$Aktual,
+  type = "l",
+  xlab = "Year",
+  ylab = "Sales",
+  main = "Sales Aktual dan Prediksi"
+)
+
+lines(
+  data_prediksi$Year,
+  data_prediksi$Prediksi,
+  lty = 2
+)
+
+legend(
+  "topleft",
+  legend = c("Aktual", "Prediksi"),
+  lty = c(1,2)
+)
+
+```
+Grafik Sales Aktual dan Prediksi menunjukkan bahwa garis prediksi (garis putus-putus) secara umum mengikuti pola garis aktual (garis penuh) dengan cukup dekat dari tahun ke tahun. Ini berarti model ARDL yang digunakan mampu menangkap pola perubahan nilai Sales dengan cukup baik. Perbedaan antara nilai aktual dan prediksi terlihat relatif kecil, sehingga hasil prediksi model dapat dikatakan cukup sesuai dengan data aktual.
