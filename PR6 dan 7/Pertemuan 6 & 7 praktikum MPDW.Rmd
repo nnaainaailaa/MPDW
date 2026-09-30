@@ -1,0 +1,341 @@
+---
+title: "Pertemuan 6 dan 7 MPDW"
+author: "Naa'ila Nur Musyaffa"
+date: "2026-09-29"
+output: 
+  html_document:
+    theme: lumen
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+  pdf_document: default
+  word_document: default
+---
+
+# Import dan persiapan data
+## Memanggil packages
+```{r}
+library(forecast)
+library(ggplot2)
+library(tseries)
+
+```
+## Import Data
+```{r}
+data <- read.csv(
+  "C:\\Users\\Na'aila\\Documents\\Semester 5\\MPDW\\ispu_anggota_2.csv",
+  sep = ";",
+  stringsAsFactors = FALSE
+)
+```
+## Preprocessing Data
+
+### Mengubah format tanggal 
+```{r}
+data$tanggal <- as.Date(data$tanggal, format = "%d/%m/%Y")
+
+```
+### Mengurutkan data berdasarkan tanggal 
+```{r}
+data <- data[order(data$tanggal), ]
+```
+### Mengubah kolom max menjadi numerik 
+```{r}
+data$max <- as.numeric(data$max)
+```
+### Menghapus data yang tanggal atau nilai max yang kosong 
+```{r}
+data <- data[!is.na(data$tanggal) & !is.na(data$max), ]
+
+```
+### Melihat struktur data 
+```{r}
+head(data)
+summary(data$max)
+```
+Data yang digunakan terdiri dari 6 observasi dan 12 variabel. Variabel tanggal bertipe date, stasiun bertipe character, sedangkan variabel so2, co, o3, dan no2 bertipe integer. Variabel max telah berhasil diubah menjadi tipe numeric/double.
+
+Setelah dilakukan pembersihan data, baris yang memiliki nilai kosong (NA) pada variabel tanggal atau max telah dihapus. Berdasarkan tampilan data, terdapat 6 data yang tersisa dengan periode pengamatan 29 Desember 2020 sampai 3 Januari 2021 dan seluruh data berasal dari stasiun DKI1.
+
+Nilai variabel max pada 6 pengamatan tersebut berturut-turut adalah 28, 25, 29, 31, 47, dan 40. Nilai max terendah adalah 25, sedangkan nilai tertinggi adalah 47. Hal ini menunjukkan bahwa nilai maksimum yang diamati mengalami perubahan dari hari ke hari, dengan nilai tertinggi terjadi pada 2 Januari 2021.
+
+# Visualisasi Data Awal 
+```{r}
+ggplot(data, aes(x = tanggal, y = max)) +
+  geom_line() +
+  labs(title = "Pergerakan ISPU",
+       x = "Tanggal",
+       y = "ISPU") +
+  theme_minimal()
+```
+Berdasarkan grafik, nilai ISPU mengalami fluktuasi yang cukup tinggi dari Januari hingga April. Pada awal Januari, ISPU berada di kisaran 20–30 dan beberapa kali meningkat hingga sekitar 40–45. Nilai tertinggi terjadi pada akhir Januari dengan ISPU mencapai sekitar 60, kemudian mengalami penurunan cukup signifikan pada awal Februari. Selanjutnya, selama Februari hingga Maret, nilai ISPU cenderung lebih rendah dan berfluktuasi di kisaran 10–20. Memasuki April, nilai ISPU kembali mengalami peningkatan dan berada pada kisaran 15–30. Secara umum, kualitas udara pada periode tersebut menunjukkan perubahan yang cukup dinamis dengan beberapa peningkatan ISPU pada waktu tertentu.
+
+# Membentuk data time series 
+```{r}
+ispu_ts <- ts(data$max, frequency = 7) #(pola mingguan)
+autoplot(ispu_ts) +
+  ggtitle("Data ISPU Maksimum Harian") +
+  xlab("Waktu") +
+  ylab("Nilai ISPU")
+```
+Berdasarkan grafik, nilai ISPU maksimum harian mengalami fluktuasi selama periode pengamatan. Nilai tertinggi mencapai sekitar 62 pada periode ke-5, kemudian menurun dan cenderung berada pada kisaran 10–20, meskipun terdapat beberapa kenaikan pada periode tertentu.
+
+# Membagi data training dan testing 
+```{r}
+n <- length(ispu_ts)
+
+n_train <- floor(0.8 * n)
+
+train <- window(ispu_ts, end = time(ispu_ts)[n_train])
+test <- window(ispu_ts, start = time(ispu_ts)[n_train + 1])
+
+length(train)
+length(test)
+```
+## Plot Training 
+```{r}
+plot(train,
+     main = "Data Training ISPU",
+     ylab = "ISPU",
+     xlab = "Waktu")
+```
+Berdasarkan grafik Data Training ISPU, nilai ISPU pada data training (89 data) mengalami fluktuasi. Nilai tertinggi mencapai sekitar 62, kemudian cenderung menurun dan berada pada kisaran 10–20 di sebagian besar periode pengamatan. Data training ini mencakup 80% dari keseluruhan data, yaitu sebanyak 89 observasi, sedangkan 23 observasi digunakan sebagai data testing.
+
+# Uji Stasioneritas Data Training 
+```{r}
+adf_train <- adf.test(train)
+
+adf_train
+
+```
+Berdasarkan hasil Augmented Dickey-Fuller (ADF) Test, diperoleh nilai p-value sebesar 0,2301. Karena nilai tersebut lebih besar dari 0,05, maka H₀ tidak ditolak, sehingga data training ISPU belum stasioner. 
+
+# Differencing Orde 1
+```{r}
+train_diff1 <- diff(train)
+
+# Plot data setelah differencing
+plot(train_diff1,
+     main = "Data Training Setelah Differencing Orde 1",
+     xlab = "Waktu",
+     ylab = "Differenced ISPU")
+```
+# Uji ADF setelah differencing
+```{r}
+adf_diff1 <- adf.test(train_diff1)
+
+adf_diff1
+```
+Berdasarkan uji Augmented Dickey-Fuller (ADF), data training setelah dilakukan differencing orde 1 memiliki p-value sebesar 0,01. Karena p-value < 0,05, maka H₀ ditolak. Artinya, data setelah differencing orde 1 sudah stasioner. Oleh karena itu, proses differencing dilakukan sebanyak satu kali sehingga diperoleh d = 1 pada model ARIMA.
+
+# ACF dan PACF
+```{r}
+
+# Plot ACF dan PACF
+par(mfrow = c(1, 2))
+
+acf(train, main = "Plot ACF Differencing Orde 1")
+pacf(train, main = "Plot PACF Differencing Orde 1")
+
+par(mfrow = c(1, 1))
+```
+Berdasarkan grafik ACF, terlihat bahwa nilai autokorelasi menurun secara bertahap dan masih terdapat beberapa lag yang melewati batas signifikansi. Hal ini menunjukkan bahwa data masih memiliki korelasi antarwaktu. Sementara itu, pada grafik PACF, terdapat spike yang signifikan terutama pada lag awal, sehingga dapat menjadi pertimbangan dalam menentukan orde model ARIMA.
+
+# Pemilihan Model dengan Auto.ARIMA
+```{r}
+model_auto <- auto.arima(
+  train,
+  d = 1,
+  seasonal = FALSE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+summary(model_auto)
+```
+```{r}
+model_auto
+```
+Berdasarkan hasil pemodelan ARIMA(0,1,1) pada data training, diperoleh koefisien MA(1) sebesar -0,7110 dengan nilai RMSE sebesar 7,0691 dan MAE sebesar 4,9286. Nilai MAPE sebesar 25,7824% menunjukkan rata-rata kesalahan prediksi sekitar 25,78%. Model ini juga menghasilkan nilai AIC sebesar 599,64 dan BIC sebesar 604,60, yang dapat digunakan untuk membandingkan model ARIMA dengan model lainnya.
+
+# Membandingkan Beberapa Model ARIMA 
+```{r}
+model_110 <- Arima(train,
+                   order = c(1,1,0))
+
+model_011 <- Arima(train,
+                   order = c(0,1,1))
+
+model_111 <- Arima(train,
+                   order = c(1,1,1))
+
+model_210 <- Arima(train,
+                   order = c(2,1,0))
+
+model_012 <- Arima(train,
+                   order = c(0,1,2))
+```
+
+# Perbandungan AIC dan BIC 
+```{r}
+daftar_model <- list(
+  "ARIMA(1,1,0)" = model_110,
+  "ARIMA(0,1,1)" = model_011,
+  "ARIMA(1,1,1)" = model_111,
+  "ARIMA(2,1,0)" = model_210,
+  "ARIMA(0,1,2)" = model_012,
+  "Auto ARIMA" = model_auto
+)
+
+perbandingan_model <- data.frame(
+  Model = names(daftar_model),
+  AIC = sapply(daftar_model, AIC),
+  BIC = sapply(daftar_model, BIC)
+)
+
+# Mengurutkan berdasarkan AIC terkecil
+perbandingan_model <- perbandingan_model[
+  order(perbandingan_model$AIC), ]
+
+perbandingan_model
+```
+Berdasarkan tabel perbandingan, ARIMA(0,1,1) dan Auto ARIMA memiliki nilai AIC dan BIC yang sama, yaitu AIC 599,6413 dan BIC 604,5959. Model ARIMA(1,1,1) memiliki nilai yang sedikit lebih besar, sedangkan model lainnya memiliki AIC dan BIC yang lebih tinggi. Perbandingan ini menunjukkan bahwa model dengan nilai AIC dan BIC yang lebih kecil memiliki kecocokan model yang lebih baik terhadap data.
+
+# Model Final Sementara 
+```{r}
+nama_model_terpilih <- perbandingan_model$Model[1]
+
+model_final <- daftar_model[[nama_model_terpilih]]
+
+cat("Kandidat model berdasarkan AIC:",
+    nama_model_terpilih, "\n")
+
+summary(model_final)
+
+# Melihat orde ARIMA model
+arimaorder(model_final)
+```
+adalah ARIMA(0,1,1). Model ini memiliki orde p = 0, d = 1, q = 1, dengan nilai AIC sebesar 599,64 dan BIC sebesar 604,60. Nilai MAPE sebesar 25,78% menunjukkan tingkat kesalahan prediksi pada data training.
+
+# Diagnostik Residual 
+```{r}
+checkresiduals(model_final)
+```
+Berdasarkan grafik residual ARIMA(0,1,1), residual terlihat berfluktuasi di sekitar nilai nol. Pada grafik ACF, sebagian besar nilai autokorelasi berada di dalam batas signifikansi, sehingga residual dapat dianggap tidak memiliki autokorelasi yang signifikan. Histogram residual juga menunjukkan pola yang relatif mendekati distribusi normal.
+
+# Uji Ljung-Box
+```{r}
+orde <- arimaorder(model_final)
+
+uji_ljung_box <- Box.test(
+  residuals(model_final),
+  lag = 10,
+  type = "Ljung-Box",
+  fitdf = orde["p"] + orde["q"]
+)
+
+print(uji_ljung_box)
+```
+Berdasarkan hasil uji Ljung-Box, diperoleh nilai statistik $X^2$ = 6,834, derajat bebas sebesar 9, dan p-value sebesar 0,6534. Karena p-value lebih besar dari taraf signifikansi 0,05, maka H₀ gagal ditolak. Hal ini menunjukkan bahwa tidak terdapat autokorelasi yang signifikan pada residual model ARIMA, sehingga residual dapat dianggap memenuhi karakteristik white noise. Dengan demikian, model telah memenuhi kriteria diagnostik residual dari sisi autokorelasi dan dapat dilanjutkan ke tahap evaluasi akurasi peramalan.
+
+# Forecast Pada Data Testing 
+```{r}
+h <- length(test)
+
+forecast_test <- forecast(
+  model_final,
+  h = h
+)
+
+forecast_test
+
+```
+Berdasarkan hasil forecasting pada data testing, model ARIMA(0,1,1) menghasilkan nilai ramalan (point forecast) sebesar 16,2172 untuk seluruh periode pengujian. Interval prediksi 80% dan 95% juga menunjukkan rentang nilai ramalan yang semakin lebar pada periode berikutnya. Hal ini menunjukkan bahwa ketidakpastian hasil prediksi meningkat seiring bertambahnya periode yang diramalkan.
+
+# Plot Forecast VS Data Aktual 
+```{r}
+plot(forecast_test,
+     main = "Forecast ISPU pada Data Testing",
+     xlab = "Waktu",
+     ylab = "ISPU")
+
+lines(test,
+      col = "red",
+      lwd = 2)
+
+legend("topleft",
+       legend = c("Forecast", "Aktual"),
+       col = c("blue", "red"),
+       lty = 1,
+       lwd = 2,
+       bty = "n")
+```
+Berdasarkan grafik, hasil forecasting ISPU pada data testing menunjukkan bahwa nilai ramalan (garis biru) relatif stabil di sekitar 16,22. Sementara itu, nilai aktual (garis merah) mengalami fluktuasi, dengan beberapa nilai berada di atas maupun di bawah hasil ramalan. Secara umum, interval prediksi mencakup sebagian besar nilai aktual, meskipun rentang interval semakin melebar pada periode berikutnya.
+
+# Mengukur akurasi forecast 
+```{r}
+akurasi <- accuracy(forecast_test, test)
+
+(akurasi)
+
+```
+```{r}
+akurasi_testing <- akurasi[
+  "Test set",
+  c("RMSE", "MAE", "MAPE")
+]
+
+akurasi_testing
+```
+Berdasarkan hasil pengukuran akurasi, pada data testing diperoleh nilai RMSE sebesar 5,44, MAE sebesar 4,06, dan MAPE sebesar 19,57%. Nilai tersebut menunjukkan bahwa model ARIMA(0,1,1) menghasilkan kesalahan prediksi rata-rata sekitar 19,57% pada data testing.
+
+# Refit Model Menggunakan seluruh data
+```{r}
+# Model final adalah ARIMA(0,1,1)
+model_semua_data <- Arima(
+  ispu_ts,
+  order = c(0, 1, 1)
+)
+
+summary(model_semua_data)
+
+```
+Berdasarkan hasil refitting model menggunakan seluruh data, model yang digunakan tetap ARIMA(0,1,1). Setelah model diterapkan pada seluruh data, diperoleh nilai RMSE sebesar 6,70 dan MAE sebesar 4,70, dengan MAPE sebesar 24,57%. Koefisien MA(1) yang dihasilkan sebesar -0,7144.
+
+# Forecasting 30 Periode 
+```{r}
+forecast_30 <- forecast(
+  model_semua_data,
+  h = 30,
+  level = 95
+)
+
+print(forecast_30)
+```
+```{r}
+plot(forecast_30,
+     main = "Forecast ISPU 30 Periode ke Depan",
+     xlab = "Waktu",
+     ylab = "ISPU")
+```
+Berdasarkan grafik forecast ISPU 30 periode ke depan, hasil peramalan menunjukkan nilai ISPU diperkirakan stabil di sekitar 22 pada seluruh periode mendatang. Sementara itu, interval prediksi semakin melebar seiring bertambahnya periode, yang menunjukkan bahwa ketidakpastian hasil peramalan semakin besar untuk periode yang lebih jauh.
+```{r}
+hasil_forecast <- data.frame(
+  Periode = 1:30,
+  Tanggal = seq(
+    from = max(data$tanggal) + 1,
+    by = "day",
+    length.out = 30
+  ),
+  Forecast = as.numeric(forecast_30$mean),
+  Lower_95 = as.numeric(forecast_30$lower[, "95%"]),
+  Upper_95 = as.numeric(forecast_30$upper[, "95%"])
+)
+
+hasil_forecast
+
+```
+Hasil peramalan 30 periode ke depan menunjukkan bahwa nilai ISPU diprediksi konstan sebesar 22,28. Interval prediksi 95% semakin lebar seiring bertambahnya periode, yaitu dari 9,03–35,54 pada periode pertama hingga semakin luas pada periode berikutnya. Hal ini menunjukkan adanya ketidakpastian yang semakin besar dalam hasil peramalan jangka panjang.
+
+#Kesimpulan
+Berdasarkan hasil analisis, data ISPU menunjukkan pola yang cenderung fluktuatif dan belum stasioner sehingga dilakukan differencing orde 1. Berdasarkan perbandingan beberapa model, diperoleh ARIMA(0,1,1) sebagai model dengan nilai AIC terendah. Hasil pengujian residual menunjukkan bahwa model sudah cukup baik dalam menangkap pola data. Pada data testing, model menghasilkan RMSE sebesar 5,44, MAE sebesar 4,06, dan MAPE sebesar 19,57%, sehingga hasil peramalan memiliki tingkat kesalahan rata-rata sekitar 19,57%. Selanjutnya, peramalan 30 periode ke depan menghasilkan nilai ISPU sekitar 22,28, dengan interval prediksi yang semakin lebar seiring bertambahnya periode.
